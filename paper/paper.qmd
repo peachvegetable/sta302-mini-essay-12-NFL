@@ -1,0 +1,128 @@
+---
+title: "My title"
+subtitle: "My subtitle if needed"
+author: 
+  - Yihang Cai
+thanks: "Code and data are available at: LINK."
+date: today
+date-format: long
+abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
+format: pdf
+number-sections: true
+bibliography: references.bib
+---
+
+```{r}
+#| include: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(arrow)
+library(tidymodels)
+library(palmerpenguins)
+```
+
+
+# Introduction
+
+You can and should cross-reference sections and sub-sections. We use @citeR and @rohan.
+
+The remainder of this paper is structured as follows. @sec-data....
+
+
+
+# Data {#sec-data}
+
+
+
+# Model
+
+
+## Model set-up
+
+Define $y_i$ as the passing epa. Then $\beta_0$ is the interception and here the passing epa is normally distributed with a mean $\mu$ and a standard deviation $\sigma$, where the mean depends on three parameters $\beta_0$, $\beta_1$, $\beta_2$, and their attempts and sacks.   
+
+\begin{align} 
+y_i|\mu_i &\sim \mbox{Normal}(\mu_i, \sigma) \\
+\mu_i &= \beta_0 + \beta_1 \alpha^{attempts}_i + \alpha^{sacks}_i\\
+\beta_0 &\sim \mbox{Normal}(0, 2.5) \\
+\beta_1 &\sim \mbox{Normal}(0, 2.5) \\
+\beta_2 &\sim \mbox{Normal}(0, 2.5) 
+\end{align}
+
+We run the model in R [@citeR] using the `rstanarm` package of @rstanarm. We use the default priors from `rstanarm`.
+
+
+### Model justification
+
+
+
+# Results
+```{r}
+#| message: false
+#| echo: false
+#| warning: false
+
+linear_model <- readRDS("../models/linear_model.rds")
+analysis_data <- read_parquet("../data/analysis_data/analysis_data.parquet")
+
+analysis_data <- analysis_data %>%
+  group_by(player_id) %>%
+  mutate(
+    passing_epa_rolling_avg = rollapply(passing_epa, width = 3, FUN = mean, partial = TRUE, align = 'right', fill = NA)
+  ) %>%
+  ungroup()
+
+# Fill NA values in passing_epa_rolling_avg with the player's existing passing_epa values
+analysis_data <- analysis_data %>%
+  group_by(player_id) %>%
+  mutate(passing_epa_rolling_avg = ifelse(is.na(passing_epa_rolling_avg), 0, passing_epa_rolling_avg)) %>%
+  ungroup()
+
+linear_preds <- predict(linear_model, nfl_testing_data)
+results <- bind_cols(nfl_testing_data, linear_preds)
+mae_results <- mae(results, truth = passing_epa, estimate = .pred)
+
+print(results)
+print(mae_results)
+```
+
+
+
+
+# Discussion
+
+## First discussion point {#sec-first-point}
+
+If my paper were 10 pages, then should be be at least 2.5 pages. The discussion is a chance to show off what you know and what you learnt from all this. 
+
+## Second discussion point
+
+## Third discussion point
+
+## Weaknesses and next steps
+
+Weaknesses and next steps should also be included.
+
+\newpage
+
+\appendix
+
+# Appendix {-}
+
+
+# Additional data details
+
+# Model details {#sec-model-details}
+
+## Posterior predictive check
+
+
+
+\newpage
+
+
+# References
+
+
