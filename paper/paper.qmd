@@ -1,12 +1,11 @@
 ---
-title: "My title"
-subtitle: "My subtitle if needed"
+title: "Precision Forecasting in NFL: An Analytical Approach to Passing EPA Prediction"
 author: 
   - Yihang Cai
-thanks: "Code and data are available at: LINK."
+thanks: "Code and data are available at: https://github.com/peachvegetable/sta302-mini-essay-12-NFL"
 date: today
 date-format: long
-abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
+abstract: This paper presents an analytical approach to predicting the NFL's Expected Points Added (EPA) on passing plays, a crucial metric in understanding quarterback and offensive performance. By integrating historical player performance data and employing linear regression models, we scrutinized on-field metrics such as completions, passing yards, and touchdowns. The inclusion of a rolling average of past EPA in our models captures the dynamic nature of player performance. Results indicate that this historical context is instrumental in enhancing predictive accuracy, with our second model achieving a lower mean absolute error (MAE) compared to the first."
 format: pdf
 number-sections: true
 bibliography: references.bib
@@ -21,104 +20,171 @@ library(tidyverse)
 library(arrow)
 library(tidymodels)
 library(palmerpenguins)
+library(modelsummary)
+library(dplyr)
+library(zoo)
+library(knitr)
+library(kableExtra)
 ```
 
 
 # Introduction
 
-You can and should cross-reference sections and sub-sections. We use @citeR and @rohan.
+Predictive modeling in sports analytics has taken center stage in the realm of performance metrics. Among these, the NFL's Expected Points Added (EPA) on passing plays is a vital measure of quarterback effectiveness and team offensive strength. This study aims to build a predictive model for NFL passing EPA by examining historical player and game data. We statistically analyze relationships between passing EPA and various on-field metrics, emphasizing completions, yards, and turnovers.
 
-The remainder of this paper is structured as follows. @sec-data....
+Incorporating historical performance through a rolling average of EPA, we aim to capture the changing dynamics of player performance. Using linear regression as our foundational modeling technique, we assess the predictive capability of our model in forecasting EPA outcomes. The paper provides insights into the quantifiable aspects of passing performance, offering a statistical lens through which team strategy may be refined.
+
+The subsequent sections are structured as follows: @sec-data introduces the dataset we use. @sec-model explains the model used to predict passing EPA @sec-results compares the predicted value with the testing dataset that splits from the original dataset. @sec-discussion discusses potential improvements. 
 
 
 
 # Data {#sec-data}
+The dataset is downloaded using 'nflverse' package @citeNfl, which includes 53 variables and we are selecting 8 of them to predict the passing EPA. We use 'dplyr' @citeDplyr to select the variables we want i.e. player_id, recent_team, season, week, passing_epa, season_type, completions, interceptions, passing_tds, attempts, sacks, passing_yards that are related with passing EPA. Then we use 'zoo' @citeZoo to create a column for each player according to their historical records of passing EPA to better predict the value (feature engineering). 
 
 
-
-# Model
+# Model {#sec-model}
 
 
 ## Model set-up
 
-Define $y_i$ as the passing epa. Then $\beta_0$ is the interception and here the passing epa is normally distributed with a mean $\mu$ and a standard deviation $\sigma$, where the mean depends on three parameters $\beta_0$, $\beta_1$, $\beta_2$, and their attempts and sacks.   
+Define $y_i$ as the passing epa. Then $\beta_0$ is the interception and here the passing epa is normally distributed with a mean $\mu$ and a standard deviation $\sigma$, where the mean depends on eight parameters $\beta_0$, and their attempts, sacks, completions, passing yards, passing touchdowns, and interceptions.   
 
-\begin{align} 
-y_i|\mu_i &\sim \mbox{Normal}(\mu_i, \sigma) \\
-\mu_i &= \beta_0 + \beta_1 \alpha^{attempts}_i + \alpha^{sacks}_i\\
-\beta_0 &\sim \mbox{Normal}(0, 2.5) \\
-\beta_1 &\sim \mbox{Normal}(0, 2.5) \\
-\beta_2 &\sim \mbox{Normal}(0, 2.5) 
-\end{align}
-
-We run the model in R [@citeR] using the `rstanarm` package of @rstanarm. We use the default priors from `rstanarm`.
+\begin{align*} 
+y_i|\mu_i &\sim \text{Normal}(\mu_i, \sigma) \\
+\mu_i &= \beta_0 + \beta_1 \cdot (\alpha^{\text{attempts}}_i + \alpha^{\text{sacks}}_i + \alpha^{\text{completions}}_i + \alpha^{\text{passing\_yards}}_i + \\
+&\quad\, \alpha^{\text{passing\_tds}}_i + \alpha^{\text{interceptions}}_i + \alpha^{\text{passing\_epa\_rolling\_avg}}_i) \\
+\beta_0 &\sim \text{Normal}(0, 2.5) \\
+\beta_1 &\sim \text{Normal}(0, 2.5) \\
+\end{align*}
 
 
-### Model justification
+We run the model in R [@citeR] using the tidymodels package of [@citeTidymodels].
 
 
-
-# Results
+## Model justification
 ```{r}
 #| message: false
 #| echo: false
 #| warning: false
+#| label: tbl-firstmodel
+#| tbl-cap: "Predicted value from first model"
+#| tbl-subcap: ["actual vs predicted", "MAE"]
+#| layout-ncol: 2
 
-linear_model <- readRDS("../models/linear_model.rds")
+first_model <- readRDS("../models/first_model.rds")
 analysis_data <- read_parquet("../data/analysis_data/analysis_data.parquet")
 
-analysis_data <- analysis_data %>%
-  group_by(player_id) %>%
+nfl_testing_data <- analysis_data |>
+  filter(week >= 10) 
+
+first_preds <- predict(first_model, nfl_testing_data)
+results <- bind_cols(nfl_testing_data, first_preds)
+mae_results <- mae(results, truth = passing_epa, estimate = .pred)
+
+comp <- results |>
+  select(player_id, season, week, passing_epa, .pred) |>
+  head(10)
+
+comp_table <- comp |>
+  kable(col.names = c("Player ID", "Season", "Week", "Passing EPA", "Prediction"),
+        digits = 1, booktabs = TRUE)
+mae_value <- round(mae_results$.estimate, 2)
+mae_table <- tibble(MAE = mae_value) %>%
+  kable("latex", booktabs = TRUE)
+
+comp_table
+mae_table
+```
+
+```{r}
+#| message: false
+#| echo: false
+#| warning: false
+#| label: tbl-secondmodel
+#| tbl-cap: "Predicted value from second model"
+#| tbl-subcap: ["actual vs predicted", "MAE"]
+#| layout-ncol: 2
+
+second_model <- readRDS("../models/second_model.rds")
+analysis_data <- read_parquet("../data/analysis_data/analysis_data.parquet")
+
+analysis_data <- analysis_data |>
+  group_by(player_id) |>
   mutate(
     passing_epa_rolling_avg = rollapply(passing_epa, width = 3, FUN = mean, partial = TRUE, align = 'right', fill = NA)
-  ) %>%
+  ) |>
   ungroup()
 
 # Fill NA values in passing_epa_rolling_avg with the player's existing passing_epa values
-analysis_data <- analysis_data %>%
-  group_by(player_id) %>%
-  mutate(passing_epa_rolling_avg = ifelse(is.na(passing_epa_rolling_avg), 0, passing_epa_rolling_avg)) %>%
+analysis_data <- analysis_data |>
+  group_by(player_id) |>
+  mutate(passing_epa_rolling_avg = ifelse(is.na(passing_epa_rolling_avg), 0, passing_epa_rolling_avg)) |>
   ungroup()
 
-linear_preds <- predict(linear_model, nfl_testing_data)
-results <- bind_cols(nfl_testing_data, linear_preds)
+nfl_testing_data <- analysis_data |>
+  filter(week >= 10) 
+
+second_preds <- predict(second_model, nfl_testing_data)
+results <- bind_cols(nfl_testing_data, second_preds)
 mae_results <- mae(results, truth = passing_epa, estimate = .pred)
 
-print(results)
-print(mae_results)
+comp <- results |>
+  select(player_id, season, week, passing_epa, .pred) |>
+  head(10)
+
+comp_table <- comp |>
+  kable(col.names = c("Player ID", "Season", "Week", "Passing EPA", "Prediction"),
+        digits = 1, booktabs = TRUE)
+mae_value <- round(mae_results$.estimate, 2)
+mae_table <- tibble(MAE = mae_value) %>%
+  kable("latex", booktabs = TRUE)
+
+comp_table
+mae_table
 ```
 
+The model's predictive accuracy was assessed using mean absolute error (MAE), revealing the distance between the predicted and actual passing EPA. The first model yielded an MAE of 3.41, indicating the average magnitude of prediction errors. Comparative analyses between actual and predicted passing EPA were conducted for two models. As illustrated in @tbl-firstmodel and @tbl-secondmodel, these comparisons highlight the model's performance across different weeks of the NFL season for selected players.
+
+The first model, while robust in its explanatory power, exhibited a tendency to underpredict the higher range of passing EPA, as evident from the over-performance instances in Week 16 and Week 17. On the contrary, for the second model, the introduction of the rolling average feature for passing EPA significantly improved the precision, reducing the MAE to 3.16, demonstrating the value of incorporating historical performance trends into predictive analyses.
+
+Therefore, since the second model has smaller error by MAE (3.16 < 3.41), the feature engineering of considering the historical records of passing EPA makes the model to predict in more accuracy and precision.
+
+# Results {#sec-results}
+```{r}
+#| message: false
+#| echo: false
+#| warning: false
+#| label: tbl-modelsummary
+#| tbl-cap: "Model summary of first and second models"
 
 
+first_model <- readRDS("../models/first_model.rds")
+second_model <- readRDS("../models/second_model.rds")
 
-# Discussion
+modelsummary(
+  list(
+    "first" = first_model, "second" = second_model
+  )
+)
+```
+@tbl-modelsummary displays the estimated coefficients for two linear regression models predicting NFL passing EPA. The values outside the parentheses are the point estimates of the coefficients, and the values inside the parentheses are the standard errors, which measure the precision of the coefficient estimates. Intercept: Both models estimate a negative intercept, but the exact value is smaller in the second model. The intercept is the predicted value of passing EPA when all other predictor variables are zero. Completions: The positive coefficients for completions in both models suggest that a higher number of completions is associated with an increased passing EPA. The coefficient is slightly higher in the second model, indicating a marginally greater impact per completion. Passing Yards: These positive coefficients indicate that more passing yards are associated with higher passing EPA. The effect is slightly less in the second model. Passing Touchdowns (tds): A strong positive relationship is shown here, as touchdowns have a significant impact on passing EPA, with each touchdown contributing more in the first model than in the second. Interceptions: Negative coefficients for interceptions imply that they have a detrimental effect on passing EPA, with a slightly less negative impact in the second model. Sacks: The negative coefficients suggest that sacks negatively affect passing EPA, with the impact being somewhat reduced in the second model. Attempts: The negative coefficients indicate that more pass attempts may not necessarily lead to higher EPA, suggesting diminishing returns or inefficiencies. Passing EPA Rolling Average: Present only in the second model, the positive coefficient for the rolling average of passing EPA indicates that recent historical performance is a significant predictor of current performance.
 
-## First discussion point {#sec-first-point}
 
-If my paper were 10 pages, then should be be at least 2.5 pages. The discussion is a chance to show off what you know and what you learnt from all this. 
+# Discussion {#sec-discussion}
 
-## Second discussion point
+## Interpretation of Results
+The study's findings elucidate the intricate dynamics of NFL passing plays. The slight reduction in MAE from the first to the second model underscores the importance of historical context, as players' past performances offer a gauge for future outcomes. The models' comparative analysis affirms the complexity of predicting sports metrics, where even small enhancements in model features can yield notable improvements in accuracy.
+
+## Practical Implications
+Beyond theoretical exploration, these findings have practical implications for coaching strategies, betting markets, and player evaluations. The ability to forecast passing EPA with greater accuracy enables teams to make informed decisions, tailor training to individual player profiles, and adapt in-game tactics more dynamically.
 
 ## Third discussion point
 
 ## Weaknesses and next steps
 
-Weaknesses and next steps should also be included.
+Despite the strengths of the models, limitations persist. For instance, the exclusion of certain situational variables and defensive metrics may hinder the model's comprehensive interpretative capacity. Future research endeavors should aim to integrate additional layers of data, such as in-game decision-making, player fatigue levels, and real-time defensive adjustments, to enhance the model's predictive scope.
 
-\newpage
-
-\appendix
-
-# Appendix {-}
-
-
-# Additional data details
-
-# Model details {#sec-model-details}
-
-## Posterior predictive check
-
-
+Additionally, exploring non-linear modeling techniques and machine learning algorithms could address the complex interactions within the data that linear models may overlook.
 
 \newpage
 
