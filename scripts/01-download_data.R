@@ -1,11 +1,9 @@
 #### Preamble ####
-# Purpose: Downloads and saves the data from [...UPDATE THIS...]
-# Author: Rohan Alexander [...UPDATE THIS...]
-# Date: 11 February 2023 [...UPDATE THIS...]
-# Contact: rohan.alexander@utoronto.ca [...UPDATE THIS...]
-# License: MIT
-# Pre-requisites: [...UPDATE THIS...]
-# Any other information needed? [...UPDATE THIS...]
+# Purpose: Downloads and saves the data from nflverse
+# Author: Yihang Cai
+# Date: 28 Mar 2024
+# Contact: yihang.cai@mail.utoronto.ca
+# Any other information needed? some of the codes are modified from Telling stories with Data by Rohan Alexander
 
 
 #### Workspace setup ####
